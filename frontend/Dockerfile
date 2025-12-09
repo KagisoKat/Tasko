@@ -6,11 +6,14 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci
+# Install all dependencies with force to resolve conflicts
+RUN npm install --force
 
 # Copy application code
 COPY . .
+
+# Set environment variable to treat warnings as non-fatal
+ENV CI=false
 
 # Build the application
 RUN npm run build

@@ -39,3 +39,9 @@ Thumbs.db
 .cache/
 temp/
 tmp/
+
+# Documentation (local only)
+PERN_STACK_EXPLANATION.md
+
+# Vagrant
+.vagrant/
