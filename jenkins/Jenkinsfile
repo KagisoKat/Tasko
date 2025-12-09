@@ -1,0 +1,97 @@
+pipeline {
+    agent any
+    
+    environment {
+        DOCKER_REGISTRY = 'docker.io'
+        DOCKER_IMAGE_BACKEND = 'tasko-backend'
+        DOCKER_IMAGE_FRONTEND = 'tasko-frontend'
+        DOCKER_TAG = "${env.BUILD_NUMBER}"
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                echo 'Checking out code...'
+                checkout scm
+            }
+        }
+        
+        stage('Install Backend Dependencies') {
+            steps {
+                dir('backend') {
+                    echo 'Installing backend dependencies...'
+                    sh 'npm ci'
+                }
+            }
+        }
+        
+        stage('Run Backend Tests') {
+            steps {
+                dir('backend') {
+                    echo 'Running backend tests...'
+                    sh 'npm test'
+                }
+            }
+        }
+        
+        stage('Build Backend Docker Image') {
+            steps {
+                dir('backend') {
+                    echo 'Building backend Docker image...'
+                    sh "docker build -t ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG} ."
+                    sh "docker tag ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG} ${DOCKER_IMAGE_BACKEND}:latest"
+                }
+            }
+        }
+        
+        stage('Build Frontend Docker Image') {
+            steps {
+                dir('frontend') {
+                    echo 'Building frontend Docker image...'
+                    sh "docker build -t ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG} ."
+                    sh "docker tag ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG} ${DOCKER_IMAGE_FRONTEND}:latest"
+                }
+            }
+        }
+        
+        stage('Push Docker Images') {
+            when {
+                branch 'main'
+            }
+            steps {
+                echo 'Pushing Docker images to registry...'
+                withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh "echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin ${DOCKER_REGISTRY}"
+                    sh "docker push ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}"
+                    sh "docker push ${DOCKER_IMAGE_BACKEND}:latest"
+                    sh "docker push ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}"
+                    sh "docker push ${DOCKER_IMAGE_FRONTEND}:latest"
+                }
+            }
+        }
+        
+        stage('Deploy') {
+            when {
+                branch 'main'
+            }
+            steps {
+                echo 'Deploying application...'
+                sh 'docker-compose down || true'
+                sh 'docker-compose up -d'
+            }
+        }
+    }
+    
+    post {
+        always {
+            echo 'Cleaning up workspace...'
+            cleanWs()
+        }
+        success {
+            echo '✅ Pipeline completed successfully!'
+        }
+        failure {
+            echo '❌ Pipeline failed!'
+        }
+    }
+}
